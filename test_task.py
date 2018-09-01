@@ -40,5 +40,5 @@ class IntegrationTests(unittest.TestCase):
 
         f.seek(0)
         error_message = ("Class initialization failed with exception not enough"
-                         " values to unpack (expected at least 4, got 3)\n")
+                         " values to unpack (expected 8, got 3)\n")
         self.assertEqual(f.read(), error_message)

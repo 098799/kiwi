@@ -1,72 +1,73 @@
-import json
 import datetime
+import json
 import sys
 
 
+class Flight(object):
+    """For easy retrival of attributes."""
+
+    def __init__(self, row):
+        (self.source,
+         self.destination,
+         self.departure,
+         self.arrival,
+         self.flight_number,
+         self.price,
+         self.bags_allowed,
+         self.bag_price) = row
+
+
 class FlightCombinator(object):
+    """For avoidance of global variables."""
+
     def __init__(self, data, bags=0):
         self.bags = bags
         self._data = self.process_data(data)
 
-    def convert_date(self, row):
-        arrival, departure, time_departure, time_arrival, *rest = row
-        return (arrival,
-                departure,
-                self.time_from_string(time_departure),
-                self.time_from_string(time_arrival),
-                *rest)
+    def convert_to_python(self, row):
+        """We don't want to care about pythonizing strings."""
+        (source,
+         destination,
+         departure,
+         arrival,
+         flight_number,
+         price,
+         bags_allowed,
+         bag_price) = row
+        return (source,
+                destination,
+                self.time_from_string(departure),
+                self.time_from_string(arrival),
+                flight_number,
+                int(price),
+                int(bags_allowed),
+                int(bag_price))
 
     def flatten(self, list_of_lists):
+        """Outcome of a recursive function has to be parsed."""
         big_list = []
 
         for item in list_of_lists:
-            if isinstance(item[0], tuple):
+            if isinstance(item[0], Flight):
                 big_list.append(item)
             else:
                 big_list.extend(self.flatten(item))
 
         return big_list
 
-    @staticmethod
-    def get_allowed_bags(row):
-        return int(row[6]) if row else 2
-
-    @staticmethod
-    def get_flight_number(row):
-        return row[4]
-
-    @staticmethod
-    def get_place(row, which):
-        if which == "departure":
-            return row[0] if row else None
-        elif which == "arrival":
-            return row[1] if row else None
-
-    @staticmethod
-    def get_price(row):
-        return int(row[5])
-
-    @staticmethod
-    def get_time(row, which):
-        if which == "departure":
-            return row[2] if row else None
-        elif which == "arrival":
-            return row[3] if row else None
-
     def possibility(self, history):
-        current_row = history[-1]
-        current_place = self.get_place(current_row, "arrival")
-        current_time = self.get_time(current_row, "arrival")
-        visited_places = [self.get_place(row, "arrival") for row in history]
+        """Recursively find all possibilities given constraints."""
+        current_flight = history[-1]
+        visited_places = [flight.arrival for flight in history]
 
         possibilities = list(filter(
-            lambda row: (
-                self.get_place(row, "departure") == current_place
-                and self.get_place(row, "arrival") not in visited_places
-                and (self.get_time(row, "departure") - current_time).days == 0
-                and (self.get_time(row, "departure") - current_time).seconds > 3600
-                and (self.get_time(row, "departure") - current_time).seconds < 3600 * 4
-                and (self.get_allowed_bags(row) >= self.bags)
+            lambda flight: (
+                flight.source == current_flight.destination
+                and flight.arrival not in visited_places
+                and (flight.departure - current_flight.arrival).days == 0
+                and (flight.departure - current_flight.arrival).seconds > 3600
+                and (flight.departure - current_flight.arrival).seconds < 3600 * 4
+                and flight.bags_allowed >= self.bags
             ),
             self.data))
 
@@ -76,38 +77,45 @@ class FlightCombinator(object):
         return [self.possibility(history + [option]) for option in possibilities]
 
     def pretty_print(self, combination):
-        start = self.get_place(combination[0], "departure")
-        end = [self.get_place(row, "arrival") for row in combination]
+        """One of inf ways to print the results. Suitable for reading?"""
+        start = combination[0].source
+        end = [flight.destination for flight in combination]
         return (
             "->".join([start] + end),
-            [self.get_flight_number(row) for row in combination],
-            sum(self.get_price(row) for row in combination)
+            [flight.flight_number for flight in combination],
+            sum(flight.price for flight in combination)
         )
 
     def process_data(self, data):
-        return [self.convert_date(row) for row in data]
+        """Create "Flight" instanes from raw data."""
+        return [Flight(self.convert_to_python(row)) for row in data]
 
     def return_all(self, bags=0):
+        """Main entry point."""
         self.update_bags(bags)
-        all_possibilities = list(filter(lambda x: x,
-                                        [self.possibility([row])
-                                         for row in self.data]))
+        all_possibilities = list(filter(
+            lambda x: x,
+            [self.possibility([flight]) for flight in self.data]
+        ))
 
-        return [self.pretty_print(row) for row in self.flatten(all_possibilities)]
+        return [self.pretty_print(flight) for flight in self.flatten(all_possibilities)]
 
     @staticmethod
     def time_from_string(time_string):
         return datetime.datetime.strptime(time_string, "%Y-%m-%dT%H:%M:%S")
 
     def update_bags(self, bags):
+        """Constrain current self.data given bag concerns."""
         self.bags = bags
-        self.data = [row for row in self._data if self.get_allowed_bags(row) >= self.bags]
+        self.data = [flight for flight in self._data if flight.bags_allowed >= self.bags]
 
 
 def import_data():
     data = []
+
     for line in sys.stdin:
         data.append(line.rstrip("\n").split(","))
+
     return data[1:]
 
 
