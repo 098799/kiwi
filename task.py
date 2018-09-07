@@ -24,6 +24,15 @@ class FlightCombinator(object):
         self.bags = bags
         self._data = self.process_data(data)
 
+    def conditions(self, current_flight, possible_flight, visited_places):
+        return (
+            possible_flight.source == current_flight.destination and
+            possible_flight.arrival not in visited_places and
+            (possible_flight.departure - current_flight.arrival).days == 0 and
+            3600 * 4 > (possible_flight.departure - current_flight.arrival).seconds > 3600 and
+            possible_flight.bags_allowed >= self.bags
+        )
+
     def convert_to_python(self, row):
         """We don't want to care about pythonizing strings."""
         (source,
@@ -60,19 +69,19 @@ class FlightCombinator(object):
         current_flight = history[-1]
         visited_places = [flight.arrival for flight in history]
 
-        possibilities = list(filter(
-            lambda flight: (
-                flight.source == current_flight.destination
-                and flight.arrival not in visited_places
-                and (flight.departure - current_flight.arrival).days == 0
-                and (flight.departure - current_flight.arrival).seconds > 3600
-                and (flight.departure - current_flight.arrival).seconds < 3600 * 4
-                and flight.bags_allowed >= self.bags
-            ),
-            self.data))
+        possibilities = list(
+            filter(
+                lambda possible_flight: self.conditions(
+                    current_flight,
+                    possible_flight,
+                    visited_places
+                ),
+                self.data
+            )
+        )
 
         if not possibilities:
-            return history if (len(history) > 1) else None
+            return history if len(history) > 1 else None
 
         return [self.possibility(history + [option]) for option in possibilities]
 
@@ -134,7 +143,9 @@ def main():
 
     output = {}
 
-    for bags in range(3):
+    max_number_of_bags = 2
+
+    for bags in range(max_number_of_bags + 1):
         try:
             output[bags] = flight_combinator.return_all(bags=bags)
         except Exception as e:
